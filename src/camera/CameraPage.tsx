@@ -15,6 +15,7 @@ type PendingConn = { conn: DataConnection; clientId: string; deviceName?: string
 export function CameraPage({ onBack }: { onBack: () => void }) {
   const [sportId, setSportId] = useState<SportId | null>(null);
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
+  const [cameraError, setCameraError] = useState("");
   const [micEnabled, setMicEnabled] = useState(false);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [isRecording, setIsRecording] = useState(false);
@@ -79,6 +80,21 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
     }
   }, [sport]);
 
+  useEffect(() => {
+    if (cameraStatus !== "active" || !videoRef.current || !streamRef.current) return;
+
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    video.srcObject = stream;
+    video.play().catch(() => {});
+
+    return () => {
+      if (video.srcObject === stream) {
+        video.srcObject = null;
+      }
+    };
+  }, [cameraStatus]);
+
   // wake lock support detection
   useEffect(() => {
     setWakeLockSupported("wakeLock" in navigator);
@@ -129,6 +145,20 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
 
   async function requestCamera() {
     setCameraStatus("requesting");
+    setCameraError("");
+
+    if (!window.isSecureContext) {
+      setCameraError("카메라는 HTTPS 주소 또는 localhost에서만 사용할 수 있습니다. 배포 주소가 https://로 열렸는지 확인하세요.");
+      setCameraStatus("denied");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("이 브라우저는 카메라 권한 요청을 지원하지 않습니다. Chrome, Edge, Safari 최신 버전에서 다시 시도하세요.");
+      setCameraStatus("denied");
+      return;
+    }
+
     const tryConstraints = async (width: number, height: number) => {
       return navigator.mediaDevices.getUserMedia({
         audio: micEnabled,
@@ -155,15 +185,12 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
         stream = await navigator.mediaDevices.getUserMedia({ audio: micEnabled, video: true });
       } catch {
         setCameraStatus("denied");
+        setCameraError("카메라 권한이 허용되지 않았습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 카메라를 허용한 뒤 다시 시도하세요.");
         return;
       }
     }
 
     streamRef.current = stream;
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(() => {});
-    }
     setCameraStatus("active");
   }
 
@@ -366,7 +393,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
 
           {cameraStatus === "denied" && (
             <p className="setup-error">
-              ⚠️ 카메라 권한이 거부되었습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 카메라를 허용하세요.
+              ⚠️ {cameraError || "카메라 권한이 거부되었습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 카메라를 허용하세요."}
             </p>
           )}
 
