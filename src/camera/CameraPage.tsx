@@ -12,6 +12,22 @@ type CameraStatus = "idle" | "requesting" | "active" | "denied" | "mock";
 
 type PendingConn = { conn: DataConnection; clientId: string; deviceName?: string };
 
+function getCameraErrorMessage(error: unknown) {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "카메라 권한이 허용되지 않았습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 카메라를 허용한 뒤 다시 시도하세요.";
+    }
+    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+      return "사용 가능한 카메라를 찾지 못했습니다. 기기에 카메라가 연결되어 있고 다른 앱에서 사용 중이 아닌지 확인하세요.";
+    }
+    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+      return "카메라를 시작하지 못했습니다. 다른 앱이 카메라를 사용 중이면 닫고 다시 시도하세요.";
+    }
+  }
+
+  return "카메라를 시작하지 못했습니다. 브라우저 권한과 기기 카메라 상태를 확인한 뒤 다시 시도하세요.";
+}
+
 export function CameraPage({ onBack }: { onBack: () => void }) {
   const [sportId, setSportId] = useState<SportId | null>(null);
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>("idle");
@@ -83,13 +99,12 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (cameraStatus !== "active" || !videoRef.current || !streamRef.current) return;
 
-    const video = videoRef.current;
     const stream = streamRef.current;
-    video.srcObject = stream;
-    video.play().catch(() => {});
+    attachStreamToVideo(stream);
 
     return () => {
-      if (video.srcObject === stream) {
+      const video = videoRef.current;
+      if (video?.srcObject === stream) {
         video.srcObject = null;
       }
     };
@@ -143,6 +158,19 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
     return () => host.destroy();
   }, [sportId, dispatchGameAction]);
 
+  function attachStreamToVideo(stream: MediaStream) {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
+
+    video.muted = true;
+    video.playsInline = true;
+    video.play().catch(() => {});
+  }
+
   async function requestCamera() {
     setCameraStatus("requesting");
     setCameraError("");
@@ -172,25 +200,32 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
     };
 
     let stream: MediaStream | null = null;
+    let lastError: unknown = null;
     for (const [w, h] of [[1280, 720], [960, 540], [640, 480]]) {
       try {
         stream = await tryConstraints(w, h);
         break;
-      } catch {
+      } catch (error) {
+        lastError = error;
+        if (error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError")) {
+          break;
+        }
         // try lower resolution
       }
     }
     if (!stream) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: micEnabled, video: true });
-      } catch {
+      } catch (error) {
         setCameraStatus("denied");
-        setCameraError("카메라 권한이 허용되지 않았습니다. 브라우저 주소창 옆 자물쇠 아이콘에서 카메라를 허용한 뒤 다시 시도하세요.");
+        setCameraError(getCameraErrorMessage(error || lastError));
         return;
       }
     }
 
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = stream;
+    attachStreamToVideo(stream);
     setCameraStatus("active");
   }
 
@@ -322,6 +357,26 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
+  const cameraFeed = (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      aria-hidden="true"
+      tabIndex={-1}
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        pointerEvents: "none",
+      }}
+    />
+  );
+
   // ── Consent screen ──
   if (!consentShown) {
     return (
@@ -367,6 +422,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   if (cameraStatus === "idle" || cameraStatus === "requesting" || cameraStatus === "denied") {
     return (
       <div className="setup-page">
+        {cameraFeed}
         {/* 상단 방코드 — 컨트롤러가 먼저 연결 가능하도록 항상 노출 */}
         <div className="setup-roomcode-bar">
           <span>방코드</span>
@@ -426,8 +482,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   // ── Main camera view (active or mock) ──
   return (
     <div className="camera-page">
-      {/* hidden video element for feed */}
-      <video ref={videoRef} playsInline muted style={{ display: "none" }} />
+      {cameraFeed}
 
       {/* recording canvas */}
       <div className="canvas-wrapper">
