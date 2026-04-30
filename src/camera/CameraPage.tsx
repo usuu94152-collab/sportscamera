@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useReducer } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { DataConnection } from "peerjs";
 import type { SportId, GameState, GameAction } from "../game/types";
 import { getSport, ALL_SPORTS } from "../game/sports";
@@ -56,18 +56,6 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   const recordingStartRef = useRef(0);
 
   const sport = sportId ? getSport(sportId) : null;
-
-  const [gameState, dispatchGame] = useReducer(
-    (s: GameState, a: GameAction) => sport ? sport.reduce(s, a) : s,
-    null as unknown as GameState
-  );
-
-  // init game state when sport selected
-  useEffect(() => {
-    if (sport && !gameState) {
-      dispatchGame({ type: "TIMER_RESET" }); // triggers re-render with initial state
-    }
-  }, [sport, gameState]);
 
   // actual init via separate ref trick
   const gameStateRef = useRef<GameState | null>(null);
