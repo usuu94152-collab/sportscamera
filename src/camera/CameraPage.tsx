@@ -190,6 +190,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
           facingMode: { ideal: facingMode },
           width: { ideal: width },
           height: { ideal: height },
+          aspectRatio: { ideal: 16 / 9 },
           frameRate: { ideal: 30, max: 30 },
         },
       });

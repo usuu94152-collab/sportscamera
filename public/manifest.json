@@ -2,9 +2,10 @@
   "name": "스포츠 중계 카메라",
   "short_name": "SportCast",
   "description": "학교 스포츠클럽 경기를 TV 중계 스타일로 촬영하는 앱",
-  "start_url": "/",
+  "start_url": "/sportscamera/",
+  "scope": "/sportscamera/",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "landscape",
   "background_color": "#0d0d0d",
   "theme_color": "#0d0d0d",
   "icons": [
