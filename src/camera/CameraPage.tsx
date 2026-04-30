@@ -44,6 +44,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   const [wakeLockActive, setWakeLockActive] = useState(false);
   const [visibilityWarning, setVisibilityWarning] = useState(false);
   const [consentShown, setConsentShown] = useState(false);
+  const [cameraFeedReady, setCameraFeedReady] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -168,12 +169,19 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
 
     video.muted = true;
     video.playsInline = true;
-    video.play().catch(() => {});
+    video.play()
+      .then(() => {
+        if (video.readyState >= 2 && video.videoWidth > 0) {
+          setCameraFeedReady(true);
+        }
+      })
+      .catch(() => {});
   }
 
   async function requestCamera() {
     setCameraStatus("requesting");
     setCameraError("");
+    setCameraFeedReady(false);
 
     if (!window.isSecureContext) {
       setCameraError("카메라는 HTTPS 주소 또는 localhost에서만 사용할 수 있습니다. 배포 주소가 https://로 열렸는지 확인하세요.");
@@ -254,6 +262,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
     if (isRecording) return;
     const next = facingMode === "environment" ? "user" : "environment";
     setFacingMode(next);
+    setCameraFeedReady(false);
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -357,23 +366,18 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  const cameraFeed = (
+  const renderCameraFeed = (className: string) => (
     <video
       ref={videoRef}
+      className={className}
       autoPlay
       playsInline
       muted
       aria-hidden="true"
       tabIndex={-1}
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: 1,
-        height: 1,
-        opacity: 0,
-        pointerEvents: "none",
-      }}
+      onLoadedData={() => setCameraFeedReady(true)}
+      onCanPlay={() => setCameraFeedReady(true)}
+      onPlaying={() => setCameraFeedReady(true)}
     />
   );
 
@@ -422,7 +426,7 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   if (cameraStatus === "idle" || cameraStatus === "requesting" || cameraStatus === "denied") {
     return (
       <div className="setup-page">
-        {cameraFeed}
+        {renderCameraFeed("camera-feed-hidden")}
         {/* 상단 방코드 — 컨트롤러가 먼저 연결 가능하도록 항상 노출 */}
         <div className="setup-roomcode-bar">
           <span>방코드</span>
@@ -482,10 +486,9 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
   // ── Main camera view (active or mock) ──
   return (
     <div className="camera-page">
-      {cameraFeed}
-
       {/* recording canvas */}
       <div className="canvas-wrapper">
+        {cameraStatus === "active" && renderCameraFeed("camera-feed-preview")}
         {gameStateLive && sport && (
           <CameraCanvas
             videoRef={videoRef}
@@ -493,6 +496,16 @@ export function CameraPage({ onBack }: { onBack: () => void }) {
             gameState={gameStateLive}
             canvasRef={canvasRef}
           />
+        )}
+        {cameraStatus === "active" && !cameraFeedReady && (
+          <div className="camera-feed-message">
+            <strong>카메라 화면 연결 중…</strong>
+            <span>권한은 허용됐지만 영상 프레임을 기다리고 있습니다.</span>
+            <div className="camera-feed-actions">
+              <button onClick={requestCamera}>다시 연결</button>
+              <button onClick={switchCamera}>전/후면 전환</button>
+            </div>
+          </div>
         )}
         {isRecording && <div className="rec-indicator">● REC</div>}
       </div>

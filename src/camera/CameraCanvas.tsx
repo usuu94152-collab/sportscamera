@@ -25,12 +25,14 @@ export function CameraCanvas({ videoRef, sport, gameState, canvasRef }: Props) {
     if (!ctx) return;
 
     function draw() {
+      ctx!.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       const video = videoRef.current;
-      if (video && video.readyState >= 2) {
-        ctx!.drawImage(video, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      } else {
-        ctx!.fillStyle = "#111";
-        ctx!.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      if (video && video.readyState >= 2 && video.videoWidth > 0) {
+        try {
+          ctx!.drawImage(video, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        } catch {
+          // Keep the preview video visible underneath if a mobile browser delays canvas drawing.
+        }
       }
       const timerMs = calcTimerDisplayMs(gameState);
       sport.drawOverlay(ctx!, gameState, timerMs, {
@@ -54,7 +56,7 @@ export function CameraCanvas({ videoRef, sport, gameState, canvasRef }: Props) {
         height: "100%",
         objectFit: "contain",
         display: "block",
-        background: "#000",
+        background: "transparent",
       }}
     />
   );
